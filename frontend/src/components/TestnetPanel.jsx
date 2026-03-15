@@ -22,7 +22,15 @@ const TOKENS_MAP = {
 
 export function TestnetPanel({ showMessage }) {
   const { address, isConnected, isConnecting, connect, disconnect, error: walletError } = useWallet();
-  const hasMetaMask = typeof window !== 'undefined' && !!window.ethereum;
+  const [hasMetaMask, setHasMetaMask] = useState(true); // optimistically assume installed
+  useEffect(() => {
+    // Check after mount — MetaMask injects window.ethereum asynchronously
+    const check = () => setHasMetaMask(!!window.ethereum);
+    check();
+    window.addEventListener('ethereum#initialized', check, { once: true });
+    const t = setTimeout(check, 500); // second check after 500ms
+    return () => clearTimeout(t);
+  }, []);
   const [faucetLoading, setFaucetLoading] = useState(false);
   const [faucetResult,  setFaucetResult]  = useState(null);
   const [copied, setCopied] = useState('');
