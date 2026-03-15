@@ -22,15 +22,6 @@ const TOKENS_MAP = {
 
 export function TestnetPanel({ showMessage }) {
   const { address, isConnected, isConnecting, connect, disconnect, error: walletError } = useWallet();
-  const [hasMetaMask, setHasMetaMask] = useState(true); // optimistically assume installed
-  useEffect(() => {
-    // Check after mount — MetaMask injects window.ethereum asynchronously
-    const check = () => setHasMetaMask(!!window.ethereum);
-    check();
-    window.addEventListener('ethereum#initialized', check, { once: true });
-    const t = setTimeout(check, 500); // second check after 500ms
-    return () => clearTimeout(t);
-  }, []);
   const [faucetLoading, setFaucetLoading] = useState(false);
   const [faucetResult,  setFaucetResult]  = useState(null);
   const [copied, setCopied] = useState('');
@@ -189,30 +180,7 @@ export function TestnetPanel({ showMessage }) {
             <h3 className="text-[10px] text-textDim uppercase tracking-widest mb-2">Get Test Tokens</h3>
             <p className="text-[10px] text-textDim mb-3">Claim TKA, TKB, USDC to try swapping on-chain.</p>
 
-            {!hasMetaMask ? (
-              <a
-                href="https://metamask.io/download/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 rounded-lg text-xs font-medium bg-white text-black hover:bg-white/90 transition-colors flex items-center justify-center gap-2"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                Install MetaMask
-              </a>
-            ) : !isConnected ? (
-              <div className="space-y-2">
-                <button
-                  onClick={connect}
-                  disabled={isConnecting}
-                  className="w-full py-2.5 rounded-lg text-xs font-medium bg-white text-black hover:bg-white/90 disabled:opacity-50 transition-colors"
-                >
-                  {isConnecting ? 'Connecting...' : 'Connect Wallet to Claim'}
-                </button>
-                {walletError && (
-                  <p className="text-[10px] text-danger text-center">{walletError}</p>
-                )}
-              </div>
-            ) : (
+            {isConnected ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-success/5 border border-success/15">
                   <span className="text-[10px] font-mono text-success">{address.slice(0, 8)}...{address.slice(-6)}</span>
@@ -222,6 +190,19 @@ export function TestnetPanel({ showMessage }) {
                   className="w-full py-2.5 rounded-lg text-xs font-medium bg-white/5 border border-border text-white hover:bg-white/10 transition-colors disabled:opacity-50">
                   {faucetLoading ? 'Claiming...' : 'Claim Test Tokens'}
                 </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button
+                  onClick={connect}
+                  disabled={isConnecting}
+                  className="w-full py-2.5 rounded-lg text-xs font-medium bg-white text-black hover:bg-white/90 disabled:opacity-50 transition-colors"
+                >
+                  {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                </button>
+                {walletError && (
+                  <p className="text-[10px] text-danger text-center">{walletError}</p>
+                )}
               </div>
             )}
 

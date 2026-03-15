@@ -7,19 +7,26 @@ export function useWallet() {
   const [error, setError] = useState(null);
 
   const connect = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.ethereum) {
-      setError('MetaMask not installed');
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const chain = await window.ethereum.request({ method: 'eth_chainId' });
+      // Wait up to 1s for MetaMask to inject window.ethereum
+      let provider = window.ethereum;
+      if (!provider) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        provider = window.ethereum;
+      }
+      if (!provider) {
+        setError('MetaMask not detected. Make sure the extension is enabled and this page is trusted.');
+        return;
+      }
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      const chain = await provider.request({ method: 'eth_chainId' });
       setAddress(accounts[0] || null);
       setChainId(chain ? parseInt(chain, 16) : null);
     } catch (e) {
-      setError(e.message);
+      // code 4001 = user rejected
+      setError(e.code === 4001 ? 'Connection rejected.' : e.message);
     } finally {
       setLoading(false);
     }
