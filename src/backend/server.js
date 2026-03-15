@@ -795,7 +795,7 @@ app.use('/api/research', (req, res) => proxyToResearchEngine(req, res));
 
 // ─── Start server ─────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
-  console.log(`\n🚀 QuantAMM API v2.0 running on port ${PORT}`);
+  console.log(`\n🚀 LiquidityLab API v2.0 running on port ${PORT}`);
   console.log(`📊 Pools: ${Object.keys(pools).join(', ')}`);
   console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   console.log(`🌐 REST API: http://localhost:${PORT}/api/health`);

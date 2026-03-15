@@ -90,12 +90,21 @@ This will start both the backend API (port 3001) and frontend (port 3000).
 
 ## Interview Demo Script
 
+### Proving Deployed Contracts (6 on Sepolia)
+
+1. **Header badge** — When contracts are deployed, a green **"6 deployed"** badge appears in the header. Click it to jump to the Testnet tab.
+2. **Testnet tab** — Shows all 6 contract addresses (AMMFactory, AMM pools, tokens) with **Copy** and **View on Etherscan** links.
+3. **Live swap** — Connect MetaMask to Sepolia, switch to **on-chain** mode (Swap card shows "on-chain" when connected), and execute a real swap. The tx hash proves it’s on-chain.
+4. **Block explorer** — Share Etherscan links: `https://sepolia.etherscan.io/address/<AMM_ADDRESS>` so interviewers can verify the contract and transactions.
+
+### Feature Walkthrough
+
 1. **Show real market data** — AMM vs CEX card shows live ETH price from CoinGecko
-2. **Execute a swap** — Demonstrate price impact and fee
+2. **Execute a swap** — Demonstrate price impact and fee (simulation or on-chain)
 3. **Arbitrage** — Explain when spread > 30 bps creates opportunity
 4. **Backtest** — Run 24h/7d simulation, discuss LP fees vs IL
 5. **MEV** — Simulate sandwich, explain extractable value
-6. **Wallet** — Connect MetaMask (optional: switch to Sepolia)
+6. **Wallet** — Connect MetaMask, switch to Sepolia for on-chain swaps
 7. **Architecture** — Walk through `docs/ARCHITECTURE.md` and `docs/DESIGN_DECISIONS.md`
 
 ## API Endpoints

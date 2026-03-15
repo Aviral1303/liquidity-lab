@@ -21,8 +21,13 @@ const POOL_ADDRESSES = {
   'TKA/USDC': '0xcE1D80bf144ff848F05B25C753C981aBFC8c4B9b',
 };
 
-// Public Sepolia RPC — no API key needed for reads
-const SEPOLIA_RPC = 'https://rpc.sepolia.org';
+// Public Sepolia RPCs with fallback (rpc.sepolia.org is often unreliable)
+const SEPOLIA_RPCS = [
+  'https://ethereum-sepolia-rpc.publicnode.com',
+  'https://sepolia.drpc.org',
+  'https://1rpc.io/sepolia',
+  'https://rpc.sepolia.org',
+];
 
 let ethersLib = null;
 async function getEthers() {
@@ -44,7 +49,19 @@ export function useOnChainReserves(poolId) {
 
     try {
       const { JsonRpcProvider, Contract, formatEther } = await getEthers();
-      const provider = new JsonRpcProvider(SEPOLIA_RPC);
+
+      // Try each RPC in order until one works
+      let provider = null;
+      for (const rpc of SEPOLIA_RPCS) {
+        try {
+          const p = new JsonRpcProvider(rpc);
+          await Promise.race([p.getBlockNumber(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))]);
+          provider = p;
+          break;
+        } catch {}
+      }
+      if (!provider) throw new Error('All Sepolia RPCs failed');
+
       const amm = new Contract(addr, AMM_ABI, provider);
 
       const [rA, rB, ts] = await amm.getReserves();

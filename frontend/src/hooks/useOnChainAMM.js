@@ -38,7 +38,7 @@ const ROUTER_ABI = [
 
 // Supported chains
 const SUPPORTED_CHAINS = {
-  11155111: { name: 'Sepolia',     rpc: 'https://rpc.sepolia.org' },
+  11155111: { name: 'Sepolia',     rpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
   84532:    { name: 'Base Sepolia', rpc: 'https://sepolia.base.org' },
   1337:     { name: 'Localhost',   rpc: 'http://127.0.0.1:8545' },
   31337:    { name: 'Hardhat',     rpc: 'http://127.0.0.1:8545' },
@@ -252,7 +252,7 @@ export function useOnChainAMM() {
           params: [{
             chainId: '0xaa36a7',
             chainName: 'Sepolia Testnet',
-            rpcUrls: ['https://rpc.sepolia.org'],
+            rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'],
             nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
             blockExplorerUrls: ['https://sepolia.etherscan.io'],
           }],

@@ -107,12 +107,15 @@ async function main() {
   console.log('='.repeat(50));
   Object.entries(deployed.contracts).forEach(([k, v]) => console.log(`${k.padEnd(20)} ${v}`));
 
-  // Write addresses JSON for frontend
+  // Write addresses JSON for frontend (src/config + frontend/public)
   const outDir  = path.join(__dirname, '../src/config');
-  const outPath = path.join(outDir, 'contracts.json');
+  const pubDir  = path.join(__dirname, '../frontend/public');
   fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(deployed, null, 2));
-  console.log(`\n  ✓ Addresses saved to ${outPath}`);
+  fs.mkdirSync(pubDir, { recursive: true });
+  const json = JSON.stringify(deployed, null, 2);
+  fs.writeFileSync(path.join(outDir, 'contracts.json'), json);
+  fs.writeFileSync(path.join(pubDir, 'contracts.json'), json);
+  console.log(`\n  ✓ Addresses saved to src/config/ and frontend/public/`);
 
   // ─── Etherscan verification (if not localhost) ────────────────────────────
   if (network !== 'localhost' && network !== 'hardhat') {
