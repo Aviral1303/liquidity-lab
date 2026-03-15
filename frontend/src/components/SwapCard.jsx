@@ -5,7 +5,7 @@ import { useOnChainAMM } from '../hooks/useOnChainAMM';
 
 const SLIPPAGE_PRESETS = [0.1, 0.5, 1.0, 3.0];
 
-export function SwapCard({ reserves, tokens, activePool, onSuccess, showMessage }) {
+export function SwapCard({ reserves, tokens, activePool, onSuccess, showMessage, isLiveChain }) {
   const { isOnChain, executeSwapOnChain } = useOnChainAMM();
   const [tokenIn,   setTokenIn]   = useState('A');
   const [amountIn,  setAmountIn]  = useState('');
@@ -120,7 +120,7 @@ export function SwapCard({ reserves, tokens, activePool, onSuccess, showMessage 
                 ? 'bg-success/10 text-success border border-success/20'
                 : 'bg-white/5 text-textMuted border border-border'
             }`}>
-              {isOnChain ? 'on-chain' : 'simulation'}
+              {isOnChain ? 'on-chain' : isLiveChain ? 'live reads / sim tx' : 'simulation'}
             </span>
           </div>
           <p className="text-[11px] text-textDim mt-1 font-mono">

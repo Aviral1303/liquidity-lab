@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  AreaChart, Area,
-  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine
+  AreaChart, Area, LineChart, Line,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Legend
 } from 'recharts';
-import { runBacktest, simulateMEV, getConcentratedQuote, getILCurve } from '../api';
+import { runBacktest, simulateMEV, getConcentratedQuote, getILCurve, runSimulation, compareModels, getResearchHealth } from '../api';
 
 const Tip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -18,13 +18,20 @@ const Tip = ({ active, payload, label }) => {
 };
 
 export function ResearchLab({ reserves, activePool, tokens }) {
-  const [activeSection, setActiveSection] = useState('backtest');
+  const [activeSection, setActiveSection] = useState('simulation');
+  const [engineReady, setEngineReady] = useState(null);
+
+  useEffect(() => {
+    getResearchHealth().then(() => setEngineReady(true)).catch(() => setEngineReady(false));
+  }, []);
 
   const sections = [
-    { id: 'backtest', label: 'Backtest' },
-    { id: 'mev',      label: 'MEV Sim' },
-    { id: 'il',       label: 'IL Calc' },
-    { id: 'clmm',     label: 'CLMM' },
+    { id: 'simulation', label: 'Simulation' },
+    { id: 'compare',    label: 'Compare' },
+    { id: 'backtest',   label: 'Backtest' },
+    { id: 'mev',        label: 'MEV Sim' },
+    { id: 'il',         label: 'IL Calc' },
+    { id: 'clmm',       label: 'CLMM' },
   ];
 
   return (
@@ -43,12 +50,337 @@ export function ResearchLab({ reserves, activePool, tokens }) {
             {s.label}
           </button>
         ))}
+        <span className={`ml-auto text-[9px] px-2 py-0.5 rounded font-mono ${
+          engineReady === true ? 'bg-success/10 text-success border border-success/20'
+            : engineReady === false ? 'bg-danger/10 text-danger border border-danger/20'
+            : 'bg-white/5 text-textDim border border-border'
+        }`}>
+          {engineReady === true ? 'engine ready' : engineReady === false ? 'engine offline' : 'checking...'}
+        </span>
       </div>
 
-      {activeSection === 'backtest'  && <BacktestSection tokens={tokens} />}
-      {activeSection === 'mev'       && <MEVSection reserves={reserves} tokens={tokens} activePool={activePool} />}
-      {activeSection === 'il'        && <ILSection />}
-      {activeSection === 'clmm'      && <CLMMSection tokens={tokens} />}
+      {activeSection === 'simulation' && <SimulationSection />}
+      {activeSection === 'compare'    && <CompareSection />}
+      {activeSection === 'backtest'   && <BacktestSection tokens={tokens} />}
+      {activeSection === 'mev'        && <MEVSection reserves={reserves} tokens={tokens} activePool={activePool} />}
+      {activeSection === 'il'         && <ILSection />}
+      {activeSection === 'clmm'       && <CLMMSection tokens={tokens} />}
+    </div>
+  );
+}
+
+const MODEL_COLORS = {
+  constant_product: '#ffffff',
+  stableswap: '#4ade80',
+  balancer: '#fbbf24',
+};
+
+function SimulationSection() {
+  const [steps, setSteps] = useState(200);
+  const [model, setModel] = useState('constant_product');
+  const [volatility, setVolatility] = useState(0.02);
+  const [retailCount, setRetailCount] = useState(3);
+  const [arbCount, setArbCount] = useState(1);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = async () => {
+    setLoading(true);
+    try {
+      const { data } = await runSimulation({
+        steps,
+        amm_model: model,
+        price_volatility: volatility,
+        reserve_a: 100000,
+        reserve_b: 100000,
+        initial_price: 1.0,
+        fee_bps: 30,
+        agents: {
+          retail: { count: retailCount, min_trade_usd: 100, max_trade_usd: 10000 },
+          arbitrageur: { count: arbCount, min_profit_bps: 10 },
+          lp: { count: 0 },
+        },
+      });
+      setResult(data);
+    } catch (e) {
+      console.error('Simulation error:', e);
+    } finally { setLoading(false); }
+  };
+
+  const snapshots = result?.price_snapshots || [];
+  const events = result?.events || [];
+  const successfulSwaps = events.filter(e => e.success && e.action_type === 'swap').length;
+  const arbSwaps = events.filter(e => e.success && e.agent_id.startsWith('arb')).length;
+
+  return (
+    <div className="border border-border rounded-xl bg-surface p-5">
+      <div className="flex items-start justify-between mb-5">
+        <div>
+          <h3 className="text-sm font-medium text-white">Agent-Based Simulation</h3>
+          <p className="text-[10px] text-textDim mt-1">
+            Run multi-agent AMM simulations with retail traders, arbitrageurs, and LPs. Powered by the Python research engine.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-4 gap-3 mb-4">
+        <div>
+          <label className="text-[10px] text-textDim uppercase tracking-wider block mb-1">AMM Model</label>
+          <select value={model} onChange={e => setModel(e.target.value)}
+            className="w-full bg-surfaceElevated border border-border rounded px-2 py-2 text-[10px] text-white focus:outline-none">
+            <option value="constant_product">Constant Product (V2)</option>
+            <option value="stableswap">StableSwap (Curve)</option>
+            <option value="balancer">Balancer (Weighted)</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-textDim uppercase tracking-wider block mb-1">Steps</label>
+          <input type="number" value={steps} onChange={e => setSteps(parseInt(e.target.value) || 100)}
+            className="w-full bg-surfaceElevated border border-border rounded px-2 py-2 text-[10px] text-white font-mono focus:outline-none" />
+        </div>
+        <div>
+          <label className="text-[10px] text-textDim uppercase tracking-wider block mb-1">Volatility</label>
+          <div className="flex gap-1">
+            {[0.005, 0.02, 0.05, 0.1].map(v => (
+              <button key={v} onClick={() => setVolatility(v)}
+                className={`flex-1 py-2 rounded text-[10px] font-mono ${volatility === v ? 'bg-white text-black' : 'bg-white/5 text-textMuted hover:text-white'}`}>
+                {(v * 100).toFixed(1)}%
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] text-textDim uppercase tracking-wider block mb-1">Agents</label>
+          <div className="flex gap-1">
+            <div className="flex-1">
+              <input type="number" value={retailCount} onChange={e => setRetailCount(parseInt(e.target.value) || 1)} min={0} max={10}
+                className="w-full bg-surfaceElevated border border-border rounded px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none" />
+              <p className="text-[8px] text-textDim mt-0.5 text-center">Retail</p>
+            </div>
+            <div className="flex-1">
+              <input type="number" value={arbCount} onChange={e => setArbCount(parseInt(e.target.value) || 0)} min={0} max={5}
+                className="w-full bg-surfaceElevated border border-border rounded px-2 py-1.5 text-[10px] text-white font-mono focus:outline-none" />
+              <p className="text-[8px] text-textDim mt-0.5 text-center">Arb</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button onClick={run} disabled={loading}
+        className="w-full py-2.5 rounded-lg text-xs font-medium bg-white text-black hover:bg-white/90 disabled:opacity-50 mb-4">
+        {loading ? 'Running simulation...' : 'Run Simulation'}
+      </button>
+
+      {result && (
+        <div className="space-y-4 animate-slide-up">
+          <div className="grid grid-cols-4 gap-px bg-border rounded-lg overflow-hidden">
+            {[
+              { label: 'Total Volume', value: result.total_volume?.toFixed(2) },
+              { label: 'Total Fees', value: result.total_fees?.toFixed(4), green: true },
+              { label: 'Swaps', value: `${successfulSwaps} (${arbSwaps} arb)` },
+              { label: 'Final Reserves', value: result.final_reserves?.map(r => r.toFixed(0)).join(' / ') },
+            ].map(({ label, value, green }) => (
+              <div key={label} className="bg-surface p-2.5">
+                <p className="text-[9px] text-textDim uppercase tracking-wider mb-0.5">{label}</p>
+                <p className={`text-xs font-mono font-medium ${green ? 'text-success' : 'text-white'}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-[10px] text-textDim uppercase tracking-wider mb-2">AMM Price vs Market Price</p>
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={snapshots} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="step" tick={{ fill: '#555', fontSize: 8 }} />
+                  <YAxis domain={['auto', 'auto']} tick={{ fill: '#555', fontSize: 8 }} width={40} />
+                  <Tooltip content={<Tip />} />
+                  <Line type="monotone" dataKey="amm_price" stroke="#ffffff" strokeWidth={1.5} dot={false} name="AMM" />
+                  <Line type="monotone" dataKey="market_price" stroke="rgba(255,255,255,0.3)" strokeWidth={1} dot={false} strokeDasharray="4 2" name="Market" />
+                  <Legend wrapperStyle={{ fontSize: '9px' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div>
+              <p className="text-[10px] text-textDim uppercase tracking-wider mb-2">Cumulative Volume & Fees</p>
+              <ResponsiveContainer width="100%" height={160}>
+                <AreaChart data={snapshots} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="volGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ffffff" stopOpacity={0.1} />
+                      <stop offset="95%" stopColor="#ffffff" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="step" tick={{ fill: '#555', fontSize: 8 }} />
+                  <YAxis domain={['auto', 'auto']} tick={{ fill: '#555', fontSize: 8 }} width={40} />
+                  <Tooltip content={<Tip />} />
+                  <Area type="monotone" dataKey="volume_cumulative" stroke="rgba(255,255,255,0.5)" strokeWidth={1} fill="url(#volGrad)" dot={false} name="Volume" />
+                  <Area type="monotone" dataKey="fees_cumulative" stroke="#4ade80" strokeWidth={1.5} fill="none" dot={false} name="Fees" />
+                  <Legend wrapperStyle={{ fontSize: '9px' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!result && !loading && (
+        <div className="h-28 flex items-center justify-center text-textDim text-xs">
+          Configure parameters and click "Run Simulation" to start
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompareSection() {
+  const [steps, setSteps] = useState(150);
+  const [volatility, setVolatility] = useState(0.02);
+  const [models, setModels] = useState(['constant_product', 'stableswap', 'balancer']);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const toggleModel = (m) => {
+    setModels(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
+  };
+
+  const run = async () => {
+    if (models.length < 2) return;
+    setLoading(true);
+    try {
+      const { data } = await compareModels({
+        steps,
+        models,
+        price_volatility: volatility,
+        reserve_a: 100000,
+        reserve_b: 100000,
+        initial_price: 1.0,
+        fee_bps: 30,
+      });
+      setResult(data);
+    } catch (e) {
+      console.error('Comparison error:', e);
+    } finally { setLoading(false); }
+  };
+
+  const modelLabels = { constant_product: 'Uniswap V2', stableswap: 'Curve', balancer: 'Balancer' };
+
+  // Merge price snapshots from all models for overlay chart
+  const mergedData = result?.results?.[0]?.price_snapshots?.map((_, i) => {
+    const point = { step: i };
+    result.results.forEach(r => {
+      const snap = r.price_snapshots[i];
+      if (snap) {
+        point[`${r.model}_price`] = snap.amm_price;
+        point.market_price = snap.market_price;
+      }
+    });
+    return point;
+  }) || [];
+
+  return (
+    <div className="border border-border rounded-xl bg-surface p-5">
+      <div className="mb-5">
+        <h3 className="text-sm font-medium text-white">AMM Model Comparison</h3>
+        <p className="text-[10px] text-textDim mt-1">
+          Compare Constant Product, StableSwap, and Balancer under identical market conditions.
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3 mb-4">
+        <div>
+          <label className="text-[10px] text-textDim uppercase tracking-wider block mb-1">Models</label>
+          <div className="flex gap-1">
+            {Object.entries(modelLabels).map(([id, label]) => (
+              <button key={id} onClick={() => toggleModel(id)}
+                className={`flex-1 py-2 rounded text-[10px] transition-colors ${
+                  models.includes(id) ? 'bg-white text-black' : 'bg-white/5 text-textMuted hover:text-white'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] text-textDim uppercase tracking-wider block mb-1">Steps</label>
+          <input type="number" value={steps} onChange={e => setSteps(parseInt(e.target.value) || 100)}
+            className="w-full bg-surfaceElevated border border-border rounded px-2 py-2 text-[10px] text-white font-mono focus:outline-none" />
+        </div>
+        <div>
+          <label className="text-[10px] text-textDim uppercase tracking-wider block mb-1">Volatility</label>
+          <div className="flex gap-1">
+            {[0.005, 0.02, 0.05, 0.1].map(v => (
+              <button key={v} onClick={() => setVolatility(v)}
+                className={`flex-1 py-2 rounded text-[10px] font-mono ${volatility === v ? 'bg-white text-black' : 'bg-white/5 text-textMuted hover:text-white'}`}>
+                {(v * 100).toFixed(1)}%
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <button onClick={run} disabled={loading || models.length < 2}
+        className="w-full py-2.5 rounded-lg text-xs font-medium bg-white text-black hover:bg-white/90 disabled:opacity-50 mb-4">
+        {loading ? 'Comparing...' : `Compare ${models.length} Models`}
+      </button>
+
+      {result?.results && (
+        <div className="space-y-4 animate-slide-up">
+          {/* Summary table */}
+          <div className="grid gap-px bg-border rounded-lg overflow-hidden" style={{ gridTemplateColumns: `repeat(${result.results.length + 1}, 1fr)` }}>
+            <div className="bg-surface p-2.5">
+              <p className="text-[9px] text-textDim uppercase tracking-wider">Metric</p>
+            </div>
+            {result.results.map(r => (
+              <div key={r.model} className="bg-surface p-2.5">
+                <p className="text-[10px] font-medium" style={{ color: MODEL_COLORS[r.model] }}>{modelLabels[r.model]}</p>
+              </div>
+            ))}
+            {['Volume', 'Fees', 'IL %'].map(metric => (
+              <React.Fragment key={metric}>
+                <div className="bg-surfaceElevated p-2.5">
+                  <p className="text-[9px] text-textDim">{metric}</p>
+                </div>
+                {result.results.map(r => (
+                  <div key={r.model + metric} className="bg-surfaceElevated p-2.5">
+                    <p className="text-xs font-mono text-white">
+                      {metric === 'Volume' ? r.total_volume.toFixed(2) :
+                       metric === 'Fees' ? r.total_fees.toFixed(4) :
+                       `${r.il_percent.toFixed(3)}%`}
+                    </p>
+                  </div>
+                ))}
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* Price overlay chart */}
+          <div>
+            <p className="text-[10px] text-textDim uppercase tracking-wider mb-2">Price Tracking Comparison</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={mergedData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="step" tick={{ fill: '#555', fontSize: 8 }} />
+                <YAxis domain={['auto', 'auto']} tick={{ fill: '#555', fontSize: 8 }} width={40} />
+                <Tooltip content={<Tip />} />
+                <Line type="monotone" dataKey="market_price" stroke="rgba(255,255,255,0.15)" strokeWidth={1} dot={false} strokeDasharray="4 2" name="Market" />
+                {result.results.map(r => (
+                  <Line key={r.model} type="monotone" dataKey={`${r.model}_price`} stroke={MODEL_COLORS[r.model]} strokeWidth={1.5} dot={false} name={modelLabels[r.model]} />
+                ))}
+                <Legend wrapperStyle={{ fontSize: '9px' }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {!result && !loading && (
+        <div className="h-28 flex items-center justify-center text-textDim text-xs">
+          Select at least 2 models and click "Compare" to see head-to-head results
+        </div>
+      )}
     </div>
   );
 }
@@ -264,7 +596,7 @@ function ILSection() {
     } catch {}
   };
 
-  useState(() => { loadCurve(); }, []);
+  useEffect(() => { loadCurve(); }, []);
 
   const calc = () => {
     const p0 = parseFloat(entryP) || 1;

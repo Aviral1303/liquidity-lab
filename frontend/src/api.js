@@ -51,6 +51,16 @@ export const runBacktest          = (limit)   => api.get('/backtest', { params: 
 export const simulateMEV          = (body)    => api.post('/mev/simulate', body);
 export const getConcentratedQuote = (params)  => api.get('/concentrated-quote', { params });
 
+// ── Research Engine (Python) ────────────────────────────────────────────────
+export const runSimulation     = (body)  => api.post('/research/simulation/run', body);
+export const compareModels     = (body)  => api.post('/research/simulation/compare', body);
+export const replayHistorical  = (body)  => api.post('/research/replay', body);
+export const detectArbitrage   = (body)  => api.post('/research/arbitrage/detect', body);
+export const simulateMEVPython = (body)  => api.post('/research/mev/simulate', body);
+export const getILCurvePython  = ()      => api.get('/research/analytics/il-curve');
+export const getSlippageCurvePython = (body) => api.post('/research/analytics/slippage-curve', body);
+export const getResearchHealth = ()      => api.get('/research/health');
+
 // ── Utils ─────────────────────────────────────────────────────────────────────
 export const getGasEstimate = (operation) =>
   api.get('/gas-estimate', { params: { operation } });

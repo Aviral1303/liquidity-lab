@@ -10,6 +10,7 @@ const http     = require('http');
 const { WebSocketServer, WebSocket } = require('ws');
 const BigNumber = require('bignumber.js');
 const { getMarketPrice, fetchOHLCV } = require('./marketData');
+const { startPythonServer, proxyToResearchEngine } = require('./pythonBridge');
 require('dotenv').config();
 
 const app    = express();
@@ -788,10 +789,17 @@ app.get('/api/gas-estimate', (req, res) => {
   res.json({ success: true, data: { ...est, estimatedCostEth: costEth, operation: op } });
 });
 
+// ─── Research Engine Proxy ────────────────────────────────────────────────────
+// Forward /api/research/* to the Python FastAPI research engine
+app.use('/api/research', (req, res) => proxyToResearchEngine(req, res));
+
 // ─── Start server ─────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
   console.log(`\n🚀 QuantAMM API v2.0 running on port ${PORT}`);
   console.log(`📊 Pools: ${Object.keys(pools).join(', ')}`);
   console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
-  console.log(`🌐 REST API: http://localhost:${PORT}/api/health\n`);
+  console.log(`🌐 REST API: http://localhost:${PORT}/api/health`);
+  console.log(`🔬 Research Engine: /api/research/*\n`);
+  // Start the Python research engine in the background
+  startPythonServer();
 });

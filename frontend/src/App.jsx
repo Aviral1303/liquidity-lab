@@ -8,7 +8,9 @@ import { TestnetPanel }     from './components/TestnetPanel';
 import { Toast }            from './components/Toast';
 import { PoolSelector }     from './components/PoolSelector';
 import { StatsBar }         from './components/StatsBar';
+import { BondingCurve }     from './components/BondingCurve';
 import { createWsConnection, getStats, getReserves, getPriceHistory, getTransactions } from './api';
+import { useOnChainReserves } from './hooks/useOnChainReserves';
 
 const TABS = [
   { id: 'swap',      label: 'Swap' },
@@ -28,6 +30,7 @@ export default function App() {
   const [wsStatus,     setWsStatus]     = useState('connecting');
   const [liveData,     setLiveData]     = useState({});
   const [toast,        setToast]        = useState({ message: '', type: 'success' });
+  const [deployedCount, setDeployedCount] = useState(0);
 
   const showMessage = useCallback((msg, type = 'success') => {
     setToast({ message: msg, type });
@@ -40,6 +43,16 @@ export default function App() {
     getTransactions(30, activePool).then(r => r.data.success && setTransactions(r.data.data.transactions)).catch(() => {});
     getPriceHistory(activePool, 200).then(r => r.data.success && setPriceHistory(r.data.data)).catch(() => {});
   }, [activePool]);
+
+  useEffect(() => {
+    fetch('/contracts.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const n = Object.keys(data?.contracts || {}).length;
+        setDeployedCount(n);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -81,7 +94,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      <Header wsStatus={wsStatus} />
+      <Header wsStatus={wsStatus} deployedCount={deployedCount} onTestnetClick={() => setActiveTab('testnet')} />
 
       <main className="max-w-7xl mx-auto px-4 pb-12">
         <StatsBar reserves={reserves} stats={stats} liveData={liveData} activePool={activePool} />
@@ -142,19 +155,34 @@ export default function App() {
 }
 
 function SwapLayout({ reserves, stats, priceHistory, transactions, tokens, activePool, onSuccess, showMessage }) {
+  const { reserves: chainRes, isLive } = useOnChainReserves(activePool);
+  // Prefer on-chain reserves when available
+  const liveReserves = chainRes
+    ? { reserveA: String(chainRes.reserveA), reserveB: String(chainRes.reserveB) }
+    : reserves;
+
   return (
     <div className="grid lg:grid-cols-5 gap-4">
-      <div className="lg:col-span-2 flex justify-center lg:justify-start">
-        <div className="w-full max-w-md">
-          <SwapCard
-            reserves={reserves} tokens={tokens} activePool={activePool}
-            onSuccess={onSuccess} showMessage={showMessage}
-          />
-        </div>
+      <div className="lg:col-span-2 space-y-4">
+        <SwapCard
+          reserves={liveReserves} tokens={tokens} activePool={activePool}
+          onSuccess={onSuccess} showMessage={showMessage}
+          isLiveChain={isLive}
+        />
+        {/* Bonding curve */}
+        {chainRes && (
+          <div className="border border-border rounded-xl bg-surface p-4">
+            <BondingCurve
+              reserveA={chainRes.reserveA}
+              reserveB={chainRes.reserveB}
+              tokens={tokens}
+            />
+          </div>
+        )}
       </div>
 
       <div className="lg:col-span-3 space-y-4">
-        <PoolStatsPanel stats={stats} reserves={reserves} tokens={tokens} />
+        <PoolStatsPanel stats={stats} reserves={liveReserves} tokens={tokens} isLive={isLive} chainRes={chainRes} />
         <PricePanel priceHistory={priceHistory} tokens={tokens} />
         <RecentTradesPanel transactions={transactions} tokens={tokens} />
       </div>
@@ -162,25 +190,38 @@ function SwapLayout({ reserves, stats, priceHistory, transactions, tokens, activ
   );
 }
 
-function PoolStatsPanel({ stats, reserves, tokens }) {
+function PoolStatsPanel({ stats, reserves, tokens, isLive, chainRes }) {
   const data = stats?.stats || {};
+  const rA = chainRes?.reserveA ?? parseFloat(reserves.reserveA || 0);
+  const rB = chainRes?.reserveB ?? parseFloat(reserves.reserveB || 0);
+  const price = rA > 0 ? rB / rA : 0;
+  const fmt = n => n >= 1e6 ? `${(n/1e6).toFixed(2)}M` : n >= 1e3 ? `${(n/1e3).toFixed(1)}K` : parseFloat(n).toFixed(2);
+
   const items = [
-    { label: 'TVL',        value: data.tvl ? `${parseFloat(data.tvl).toLocaleString()} units` : '—' },
-    { label: '24h Volume', value: data.totalVolume ? parseFloat(data.totalVolume).toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—' },
-    { label: 'Fees',       value: data.totalFees ? parseFloat(data.totalFees).toFixed(2) : '—' },
-    { label: 'APR',        value: data.feeAPR ? `${data.feeAPR}%` : '—', green: true },
-    { label: `${tokens.A.symbol}`, value: parseFloat(reserves.reserveA || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-    { label: `${tokens.B.symbol}`, value: parseFloat(reserves.reserveB || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+    { label: 'Price', value: price > 100 ? `$${price.toLocaleString(undefined,{maximumFractionDigits:0})}` : price.toFixed(6), highlight: true },
+    { label: '24h Volume', value: data.totalVolume ? fmt(data.totalVolume) : '—' },
+    { label: 'Fees', value: data.totalFees ? fmt(data.totalFees) : '—' },
+    { label: 'APR', value: data.feeAPR ? `${data.feeAPR}%` : '—', green: true },
+    { label: `${tokens.A.symbol}`, value: fmt(rA) },
+    { label: `${tokens.B.symbol}`, value: fmt(rB) },
   ];
 
   return (
     <div className="border border-border rounded-xl bg-surface p-4">
-      <h3 className="text-[10px] text-textDim uppercase tracking-widest mb-3">Pool Stats</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[10px] text-textDim uppercase tracking-widest">Pool Stats</h3>
+        {isLive && (
+          <span className="flex items-center gap-1 text-[9px] text-success/70 uppercase tracking-wider">
+            <span className="w-1 h-1 rounded-full bg-success live-dot" />
+            Live on Sepolia
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-3 gap-3">
-        {items.map(({ label, value, green }) => (
+        {items.map(({ label, value, green, highlight }) => (
           <div key={label}>
             <p className="text-[10px] text-textDim mb-0.5">{label}</p>
-            <p className={`text-xs font-mono font-medium ${green ? 'text-success' : 'text-white'}`}>{value}</p>
+            <p className={`text-xs font-mono font-medium ${highlight ? 'text-white' : green ? 'text-success' : 'text-textMuted'}`}>{value}</p>
           </div>
         ))}
       </div>

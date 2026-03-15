@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { WalletButton } from './WalletButton';
 import { getMarketPrice } from '../api';
 
-export function Header({ wsStatus }) {
+export function Header({ wsStatus, onTestnetClick, deployedCount }) {
   const [ethPrice, setEthPrice] = useState(null);
 
   useEffect(() => {
@@ -33,6 +33,15 @@ export function Header({ wsStatus }) {
         </div>
 
         <div className="hidden md:flex items-center gap-3 text-xs text-textMuted">
+          {deployedCount > 0 && (
+            <button
+              onClick={onTestnetClick}
+              className="flex items-center gap-1.5 px-2 py-1 rounded border border-success/30 bg-success/5 text-success hover:bg-success/10 transition-colors"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-success" />
+              {deployedCount} deployed
+            </button>
+          )}
           <span className="flex items-center gap-1.5 px-2 py-1 rounded border border-border">
             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
             Sepolia
